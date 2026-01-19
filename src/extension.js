@@ -11,6 +11,9 @@ const {
   viewState,
   purchaseLayer,
   purchaseMaxLayer,
+  purchaseAllMax,
+  doSacrifice,
+  doPrestige,
   addBits,
   resetProgress
 } = require('./game');
@@ -28,6 +31,7 @@ function activate(context) {
 
   let summaryView = null;
   let detailView = null;
+  let resetView = null;
   let debugView = null;
 
   function persist() {
@@ -57,6 +61,12 @@ function activate(context) {
     }
   }
 
+  function syncReset() {
+    if (resetView) {
+      resetView.webview.postMessage({ type: 'state', state: viewState(state) });
+    }
+  }
+
   function handleMessage(message) {
     if (message.type === 'buyLayer') {
       if (purchaseLayer(state, message.layerId)) {
@@ -64,11 +74,41 @@ function activate(context) {
         updateStatus();
         syncSummary();
         syncDetail();
+        syncReset();
         syncDebug();
       }
     }
     if (message.type === 'buyLayerMax') {
       if (purchaseMaxLayer(state, message.layerId)) {
+        persist();
+        updateStatus();
+        syncSummary();
+        syncDetail();
+        syncReset();
+        syncDebug();
+      }
+    }
+    if (message.type === 'buyAllMax') {
+      if (purchaseAllMax(state)) {
+        persist();
+        updateStatus();
+        syncSummary();
+        syncDetail();
+        syncReset();
+        syncDebug();
+      }
+    }
+    if (message.type === 'sacrifice') {
+      if (doSacrifice(state)) {
+        persist();
+        updateStatus();
+        syncSummary();
+        syncDetail();
+        syncDebug();
+      }
+    }
+    if (message.type === 'prestige') {
+      if (doPrestige(state)) {
         persist();
         updateStatus();
         syncSummary();
@@ -82,6 +122,7 @@ function activate(context) {
       updateStatus();
       syncSummary();
       syncDetail();
+      syncReset();
       syncDebug();
     }
     if (message.type === 'debugReset') {
@@ -90,7 +131,28 @@ function activate(context) {
       updateStatus();
       syncSummary();
       syncDetail();
+      syncReset();
       syncDebug();
+    }
+    if (message.type === 'sacrifice') {
+      if (doSacrifice(state)) {
+        persist();
+        updateStatus();
+        syncSummary();
+        syncDetail();
+        syncReset();
+        syncDebug();
+      }
+    }
+    if (message.type === 'prestige') {
+      if (doPrestige(state)) {
+        persist();
+        updateStatus();
+        syncSummary();
+        syncDetail();
+        syncReset();
+        syncDebug();
+      }
     }
   }
 
@@ -113,6 +175,7 @@ function activate(context) {
     persist();
     syncSummary();
     syncDetail();
+    syncReset();
     syncDebug();
   }, TICK_MS);
 
@@ -145,6 +208,16 @@ function activate(context) {
     }
   };
 
+  const resetProvider = {
+    resolveWebviewView: (webviewView) => {
+      resetView = webviewView;
+      webviewView.webview.options = { enableScripts: true };
+      webviewView.webview.html = getHtml(webviewView.webview, 'reset');
+      webviewView.webview.onDidReceiveMessage(handleMessage);
+      syncReset();
+    }
+  };
+
   const debugProvider = {
     resolveWebviewView: (webviewView) => {
       debugView = webviewView;
@@ -162,6 +235,11 @@ function activate(context) {
   );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(VIEW_IDS.detail, detailProvider, {
+      webviewOptions: { retainContextWhenHidden: true }
+    })
+  );
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(VIEW_IDS.reset, resetProvider, {
       webviewOptions: { retainContextWhenHidden: true }
     })
   );

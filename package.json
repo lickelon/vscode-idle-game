@@ -49,6 +49,12 @@
         {
           "icon": "media/idle-icon.svg",
           "type": "webview",
+          "id": "vscode-idle-resetView",
+          "name": "Resets"
+        },
+        {
+          "icon": "media/idle-icon.svg",
+          "type": "webview",
           "id": "vscode-idle-debugView",
           "name": "Debug"
         }

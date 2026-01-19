@@ -23,6 +23,12 @@ Progress is saved using VS Code's global state.
 - Fever 증가: 활동 중 0.1초당 +0.1.
 - 배수 감소: 비활동 시 초당 -0.1x (최소 1.0x).
 - 소프트 캡: k=1.0, s=2.0.
+- 티어: base=10, step=5, tierGrowth=1.5, tierPower=1.25.
+- Runtime: expFactor=0.001, typingPower=1.5.
+- Prestige: tierBoost=0.015, baseCarry=10%.
+- Sacrifice: s=0.35.
+- Delivered: rate=0.05, prestigeBoost=0.1, sacrificeBoost=0.3.
+- 하드캡: bits <= 1.8e308.
 
 ### 배수 공식
 
@@ -45,14 +51,22 @@ mult = 1 + (x * k) / (1 + x / s)
 - L1 Assembly: Typing 생산량을 곱/더하기로 강화, 주기적 버스트 생산.
 - L2 Compiler: Assembly 산출에 곱 배수, 빌드 큐로 주기적 증폭.
 - L3 High-Level: Compiler 산출에 지수/강화 배수, 자동화 해금.
-- L4 Runtime/Cloud: 최종 생산량에 추가 곱 배수, 오프라인 보정 강화.
+- L4 Runtime/Cloud: 작업 병렬화로 전반 효율 상승. Typing에 추가 배수, 구매 레벨에 로그 배수.
+- L5 Program Synthesis: 코드 생성 자동화. Typing/High-Level Delivered 생성.
 
 ### 레벨/티어 규칙
 
-- 각 레이어는 레벨을 올릴 수 있으며, 10레벨마다 티어가 1 상승.
+- 각 레이어는 레벨과 베이스 레벨(`baseLevel`)을 합산한 `totalLevel`로 티어 계산.
+- 티어 요구치: 10 → 25 → 45 → 70 ... (티어별 필요 레벨 증가폭이 5씩 증가).
 - 파생 자원을 포함한 누적 값 `C`를 기준으로 효과가 강화됨.
-  - `C = L + Delivered`
-  - `E = C * T`
+  - `C = Purchased + Delivered`
+  - `Purchased = totalLevel * runtimeBoost` (Runtime/Program Synthesis 제외)
+  - `E = C * TierBonus`
+
+```
+TierBonus = Tier ^ TierPower
+TierPower = TIER_POWER * (1 + log10(1 + baseTotal) * PRESTIGE_TIER_BOOST)
+```
 
 ### 구매 비용(초안)
 
@@ -63,8 +77,8 @@ mult = 1 + (x * k) / (1 + x / s)
   - `finalCost = cost(L) * tierCost`
 - 파생(Delivered)은 직접 구매 비용 없음.
 - 초기 값(보통 성장):
-  - base: Typing 10 / Assembly 1e3 / Compiler 1e6 / High-Level 1e9 / Runtime 1e12
-  - growth: 1.2 ~ 1.4
+  - base: Typing 10 / Assembly 1e3 / Compiler 1e6 / High-Level 1e9 / Runtime 1e12 / Program Synthesis 1e15
+  - growth: 1.2 ~ 1.45
   - tierGrowth: 1.5
 
 ### 자원 분리 의도
@@ -77,7 +91,8 @@ mult = 1 + (x * k) / (1 + x / s)
 - Delivered는 상위 레이어의 `E`를 기준으로 생성.
 - Compiler → Assembly Delivered 생성
 - High-Level → Compiler Delivered 생성
-- Runtime/Cloud → Typing 지수 증가
+- Program Synthesis → High-Level / Typing Delivered 생성
+- Runtime/Cloud → Typing 배수 및 구매 레벨 로그 배수
 - baseBits는 레이어 전체곱으로 시작
 
 ### 레이어 특수 능력 (Infinity 업그레이드로 강화)
@@ -91,14 +106,21 @@ mult = 1 + (x * k) / (1 + x / s)
 ### 최종 산출 개념
 
 ```
-baseBits = Typing * Assembly * Compiler * HighLevel * Runtime
-finalBits = baseBits * ActivityMultiplier(Fever)
+baseBits = E_Typing
+  * (1 + E_Assembly)
+  * (1 + E_Compiler)
+  * (1 + E_HighLevel)
+  * (1 + E_Runtime)
+  * (1 + E_ProgramSynthesis)
+
+finalBits = baseBits * SacrificeMult * ActivityMultiplier(Fever)
 ```
 
 ## 리셋 계층(초안)
 
 - Sacrifice: 모든 레이어 레벨 리셋 후, 최종 생산량에 곱 증가 보상.
-  - 보상 형태(안): `1 + s * log10(1 + baseBits)` (s=0.2)
+  - 보상 형태: `1 + s * log10(1 + sacrificePoints)` (s=0.35)
+  - sacrificePoints는 Sacrifice 시 `baseBits`만큼 누적.
 - Prestige: 레이어/희생 리셋 후, 레이어 베이스 레벨 상승(기본값 증가).
   - 각 레이어의 최종 레벨의 10%를 베이스 레벨로 승계(내림 처리).
   - 초반 X는 챌린지/Infinity 업그레이드로 증가 가능.
@@ -115,24 +137,48 @@ finalBits = baseBits * ActivityMultiplier(Fever)
 ### 레이어 값
 
 ```
-T = floor(L / 10) + 1
-C = L + Delivered
-E = C * T
+TierThreshold(t) = ((t-1)/2) * (2*TIER_BASE + (t-2)*TIER_STEP)
+Tier = max t where TierThreshold(t) <= totalLevel
+totalLevel = level + baseLevel
+runtimeBoost = 1 + log10(1 + E_runtime)
+Purchased = totalLevel * runtimeBoost (Runtime/Program Synthesis 제외)
+C = Purchased + Delivered
+TierPower = TIER_POWER * (1 + log10(1 + baseTotal) * PRESTIGE_TIER_BOOST)
+TierBonus = Tier ^ TierPower
+E = C * TierBonus
 ```
+
+- Typing만 Runtime 배수 적용:
+  - `runtimeEffect = 1 + RUNTIME_EXP_FACTOR * E_runtime`
+  - `E_typing = E_typing * runtimeEffect ^ TYPING_RUNTIME_POWER`
 
 ### 파생(Delivered)
 
 - Delivered는 상위 레이어의 `E`를 기준으로 생성.
 - Compiler → Assembly Delivered
 - High-Level → Compiler Delivered
-- Runtime/Cloud → Typing 지수 증가.
-- 생성률(빠름): `Delivered += 0.05 * E_parent / sec`
+- Program Synthesis → High-Level / Typing Delivered
+- 생성률:
+
+```
+prestigeBoost = 1 + baseTotal * DELIVERED_PRESTIGE_BOOST
+sacrificeBoost = 1 + sacrificeMult * DELIVERED_SACRIFICE_BOOST
+deliveredRate = (1 + DELIVERED_RATE * sacrificeBoost) ^ prestigeBoost - 1
+Delivered += E_parent * deliveredRate / sec
+```
 
 ### 생산
 
 ```
-baseBits = E_Typing * E_Assembly * E_Compiler * E_HighLevel * E_Runtime
-finalBits = baseBits * ActivityMultiplier(Fever)
+baseBits = E_Typing
+  * (1 + E_Assembly)
+  * (1 + E_Compiler)
+  * (1 + E_HighLevel)
+  * (1 + E_Runtime)
+  * (1 + E_ProgramSynthesis)
+
+finalBits = baseBits * SacrificeMult * ActivityMultiplier(Fever)
+bits <= 1.8e308 (하드캡)
 ```
 
 ### 구매 비용

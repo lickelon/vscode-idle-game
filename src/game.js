@@ -5,8 +5,18 @@ const {
   SOFT_CAP_K,
   SOFT_CAP_S,
   TIER_GROWTH,
+  TIER_BASE,
+  TIER_STEP,
+  TIER_POWER,
+  PRESTIGE_TIER_BOOST,
   DELIVERED_RATE,
   RUNTIME_EXP_FACTOR,
+  TYPING_RUNTIME_POWER,
+  SACRIFICE_S,
+  PRESTIGE_BASE_PERCENT,
+  HARD_CAP,
+  DELIVERED_PRESTIGE_BOOST,
+  DELIVERED_SACRIFICE_BOOST,
   LAYERS
 } = require('./constants');
 
@@ -19,10 +29,16 @@ function toDecimal(value) {
   return new Decimal(value || 0);
 }
 
+function clampBits(value) {
+  const cap = new Decimal(HARD_CAP);
+  return value.gt(cap) ? cap : value;
+}
+
 function createLayerState(savedLayer) {
   return {
     level: toDecimal(savedLayer?.level || 0),
-    delivered: toDecimal(savedLayer?.delivered || 0)
+    delivered: toDecimal(savedLayer?.delivered || 0),
+    baseLevel: toDecimal(savedLayer?.baseLevel || 0)
   };
 }
 
@@ -32,9 +48,11 @@ function createGameState(saved) {
     layers[layer.id] = createLayerState(saved?.layers?.[layer.id]);
   }
 
-  const bits = toDecimal(saved?.bits || 0);
+  const bits = clampBits(toDecimal(saved?.bits || 0));
   const state = {
     bits,
+    sacrificePoints: toDecimal(saved?.sacrificePoints || 0),
+    sacrificeMult: toDecimal(saved?.sacrificeMult || 1),
     fever: saved?.fever || 0,
     lastTick: saved?.lastTick || Date.now(),
     lastInput: saved?.lastInput || 0,
@@ -44,24 +62,27 @@ function createGameState(saved) {
   const allZero = LAYERS.every((layer) => state.layers[layer.id].level.eq(0));
   if (bits.eq(0) && allZero) {
     state.bits = new Decimal(10);
-    state.layers.typing.level = new Decimal(1);
   }
 
   return state;
 }
 
 function serializeGameState(state) {
+  state.bits = clampBits(state.bits);
   const layers = {};
   for (const layer of LAYERS) {
     const layerState = state.layers[layer.id];
     layers[layer.id] = {
       level: layerState.level.toString(),
-      delivered: layerState.delivered.toString()
+      delivered: layerState.delivered.toString(),
+      baseLevel: layerState.baseLevel.toString()
     };
   }
 
   return {
     bits: state.bits.toString(),
+    sacrificePoints: state.sacrificePoints.toString(),
+    sacrificeMult: state.sacrificeMult.toString(),
     fever: state.fever,
     lastTick: state.lastTick,
     lastInput: state.lastInput,
@@ -69,8 +90,33 @@ function serializeGameState(state) {
   };
 }
 
+function getTierThreshold(tier) {
+  if (tier <= 1) {
+    return 0;
+  }
+  return ((tier - 1) / 2) * (2 * TIER_BASE + (tier - 2) * TIER_STEP);
+}
+
+function getNextTierRemaining(totalLevel, tier) {
+  const nextThreshold = getTierThreshold(tier + 1);
+  const remaining = Math.max(0, nextThreshold - totalLevel.toNumber());
+  return remaining;
+}
+
 function getTier(level) {
-  return Math.floor(level.div(10).floor().toNumber()) + 1;
+  const levelNum = level.toNumber();
+  if (!Number.isFinite(levelNum)) {
+    return 1;
+  }
+  let tier = 1;
+  while (getTierThreshold(tier + 1) <= levelNum) {
+    tier += 1;
+  }
+  return tier;
+}
+
+function getTotalLevel(layerState) {
+  return layerState.level.add(layerState.baseLevel);
 }
 
 function calcMultiplier(fever) {
@@ -101,14 +147,20 @@ function feverFromMultiplier(target) {
   return high;
 }
 
-function calcLayerEffect(state, layerId, runtimeEffect) {
+function calcLayerEffect(state, layerId, runtimeEffect, runtimeBoost, tierPower) {
   const layerState = state.layers[layerId];
-  const tier = getTier(layerState.level);
-  const c = layerState.level.add(layerState.delivered);
-  let e = c.mul(tier);
+  const totalLevel = getTotalLevel(layerState);
+  const tier = getTier(totalLevel);
+  const purchased = runtimeBoost && layerId !== 'runtime' && layerId !== 'synthesis'
+    ? totalLevel.mul(runtimeBoost)
+    : totalLevel;
+  const c = purchased.add(layerState.delivered);
+  const tierMult = new Decimal(tier).pow(tierPower);
+  let e = c.mul(tierMult);
 
   if (layerId === 'typing') {
-    e = e.pow(runtimeEffect);
+    const runtimeMult = new Decimal(runtimeEffect).pow(TYPING_RUNTIME_POWER);
+    e = e.mul(runtimeMult);
   }
 
   return {
@@ -120,12 +172,18 @@ function calcLayerEffect(state, layerId, runtimeEffect) {
 
 function calcEffects(state) {
   const effects = {};
-  const runtimeBase = calcLayerEffect(state, 'runtime', 1).e;
+  const prestigeBaseTotal = LAYERS.reduce((sum, layer) => {
+    return sum.add(state.layers[layer.id].baseLevel);
+  }, new Decimal(0));
+  const prestigeLog = new Decimal(prestigeBaseTotal.add(1).log10());
+  const tierPower = TIER_POWER * (1 + prestigeLog.mul(PRESTIGE_TIER_BOOST).toNumber());
+  const runtimeBase = calcLayerEffect(state, 'runtime', 1, null, tierPower).e;
   const runtimeFactor = 1 + RUNTIME_EXP_FACTOR * runtimeBase.toNumber();
+  const runtimeBoost = new Decimal(runtimeBase.add(1).log10()).add(1);
 
   for (const layer of LAYERS) {
     const runtimeEffect = layer.id === 'typing' ? runtimeFactor : 1;
-    effects[layer.id] = calcLayerEffect(state, layer.id, runtimeEffect);
+    effects[layer.id] = calcLayerEffect(state, layer.id, runtimeEffect, runtimeBoost, tierPower);
   }
 
   return effects;
@@ -137,7 +195,8 @@ function calcBaseBits(state, effects) {
     .mul(one.add(effects.assembly.e))
     .mul(one.add(effects.compiler.e))
     .mul(one.add(effects.high.e))
-    .mul(one.add(effects.runtime.e));
+    .mul(one.add(effects.runtime.e))
+    .mul(one.add(effects.synthesis.e));
 }
 
 function calcLayerCost(state, layerId) {
@@ -188,14 +247,31 @@ function applyDelta(state, seconds, active) {
   const effects = calcEffects(state);
   const baseBits = calcBaseBits(state, effects);
   const avgMult = (multBefore + multAfter) / 2;
-  const gain = baseBits.mul(avgMult * seconds);
-  state.bits = state.bits.add(gain);
+  const gain = baseBits.mul(state.sacrificeMult).mul(avgMult * seconds);
+  state.bits = clampBits(state.bits.add(gain));
+
+  const prestigeBaseTotal = LAYERS.reduce((sum, layer) => {
+    return sum.add(state.layers[layer.id].baseLevel);
+  }, new Decimal(0));
+  const prestigeBoost = new Decimal(1).add(prestigeBaseTotal.mul(DELIVERED_PRESTIGE_BOOST));
+  const sacrificeBoost = new Decimal(1).add(state.sacrificeMult.mul(DELIVERED_SACRIFICE_BOOST));
+  const deliveredRate = new Decimal(1)
+    .add(new Decimal(DELIVERED_RATE).mul(sacrificeBoost))
+    .pow(prestigeBoost)
+    .sub(1);
+  const deliveredSeconds = new Decimal(seconds);
 
   state.layers.assembly.delivered = state.layers.assembly.delivered.add(
-    effects.compiler.e.mul(DELIVERED_RATE * seconds)
+    effects.compiler.e.mul(deliveredRate).mul(deliveredSeconds)
   );
   state.layers.compiler.delivered = state.layers.compiler.delivered.add(
-    effects.high.e.mul(DELIVERED_RATE * seconds)
+    effects.high.e.mul(deliveredRate).mul(deliveredSeconds)
+  );
+  state.layers.high.delivered = state.layers.high.delivered.add(
+    effects.synthesis.e.mul(deliveredRate).mul(deliveredSeconds)
+  );
+  state.layers.typing.delivered = state.layers.typing.delivered.add(
+    effects.synthesis.e.mul(deliveredRate).mul(deliveredSeconds)
   );
 }
 
@@ -222,27 +298,49 @@ function formatDecimal(value) {
 }
 
 function viewState(state) {
+  state.bits = clampBits(state.bits);
   const effects = calcEffects(state);
   const baseBits = calcBaseBits(state, effects);
   const multiplier = calcMultiplier(state.fever);
-  const finalBits = baseBits.mul(multiplier);
+  const finalBits = baseBits.mul(state.sacrificeMult).mul(multiplier);
+  const sacrificeReward = calcSacrificeRewardFromPoints(state.sacrificePoints);
+  const sacrificeNextReward = calcSacrificeRewardFromPoints(
+    state.sacrificePoints.add(baseBits)
+  );
+  const runtimeLevel = state.layers.runtime.level;
+  const totalBase = LAYERS.reduce((sum, layer) => {
+    return sum.add(state.layers[layer.id].baseLevel);
+  }, new Decimal(0));
+  const prestigeGain = LAYERS.reduce((sum, layer) => {
+    const layerState = state.layers[layer.id];
+    const totalLevel = getTotalLevel(layerState);
+    const gainedBase = totalLevel.mul(PRESTIGE_BASE_PERCENT).floor();
+    const diff = gainedBase.sub(layerState.baseLevel);
+    return sum.add(Decimal.max(new Decimal(0), diff));
+  }, new Decimal(0));
 
   const layers = LAYERS.map((layer) => {
     const layerState = state.layers[layer.id];
     const effect = effects[layer.id];
     const cost = calcLayerCost(state, layer.id);
+    const totalLevel = getTotalLevel(layerState);
+    const remainingToTier = getNextTierRemaining(totalLevel, effect.tier);
 
     return {
       id: layer.id,
       name: layer.name,
       level: layerState.level.toString(),
       delivered: layerState.delivered.toString(),
+      baseLevel: layerState.baseLevel.toString(),
       tier: effect.tier,
       c: effect.c.toString(),
       e: effect.e.toString(),
       cost: cost.toString(),
-      levelText: formatDecimal(layerState.level),
+      levelText: `(${formatDecimal(layerState.level)}+${formatDecimal(layerState.baseLevel)})`,
       deliveredText: formatDecimal(layerState.delivered),
+      baseLevelText: formatDecimal(layerState.baseLevel),
+      totalLevelText: formatDecimal(totalLevel),
+      nextTierText: formatDecimal(new Decimal(remainingToTier)),
       cText: formatDecimal(effect.c),
       eText: formatDecimal(effect.e),
       costText: formatDecimal(cost)
@@ -260,6 +358,15 @@ function viewState(state) {
     feverText: state.fever.toFixed(1),
     multiplier,
     multiplierText: multiplier.toFixed(2),
+    sacrificeMult: state.sacrificeMult.toString(),
+    sacrificeMultText: formatDecimal(state.sacrificeMult),
+    sacrificeRewardText: formatDecimal(sacrificeReward),
+    sacrificeNextRewardText: formatDecimal(sacrificeNextReward),
+    totalBaseText: formatDecimal(totalBase),
+    prestigeGainText: formatDecimal(prestigeGain),
+    prestigePercentText: `${(PRESTIGE_BASE_PERCENT * 100).toFixed(0)}%`,
+    canSacrifice: baseBits.gte(1),
+    canPrestige: runtimeLevel.gte(1),
     layers
   };
 }
@@ -277,51 +384,125 @@ function purchaseLayer(state, layerId) {
 
 function purchaseMaxLayer(state, layerId) {
   const layer = LAYERS[LAYER_INDEX[layerId]];
-  const level = state.layers[layerId].level;
   const growth = new Decimal(layer.growth);
-  const tierCost = calcTierCost(level);
   const base = new Decimal(layer.baseCost);
-  const startCost = base.mul(growth.pow(level)).mul(tierCost);
-  const nextTierLevel = getTier(level) * 10;
-  const maxLevelsThisTier = nextTierLevel - level.toNumber();
+  let level = state.layers[layerId].level;
+  let remaining = state.bits;
+  let purchased = 0;
 
-  if (maxLevelsThisTier <= 0) {
+  while (true) {
+    const tier = getTier(level);
+    const tierCost = new Decimal(TIER_GROWTH).pow(tier - 1);
+    const startCost = base.mul(growth.pow(level)).mul(tierCost);
+    const nextTierLevel = getTierThreshold(tier + 1);
+    const maxLevelsThisTier = nextTierLevel - level.toNumber();
+
+    if (maxLevelsThisTier <= 0) {
+      break;
+    }
+
+    const rhs = remaining.mul(growth.sub(1)).div(startCost).add(1);
+    if (rhs.lte(1)) {
+      break;
+    }
+
+    const maxAffordable = Math.floor(rhs.log(layer.growth));
+    const toBuy = Math.min(maxAffordable, maxLevelsThisTier);
+    if (toBuy <= 0) {
+      break;
+    }
+
+    const totalCost = sumGeometricSeries(startCost, growth, toBuy);
+    if (remaining.lt(totalCost)) {
+      break;
+    }
+
+    remaining = remaining.sub(totalCost);
+    level = level.add(toBuy);
+    purchased += toBuy;
+  }
+
+  if (purchased <= 0) {
     return false;
   }
 
-  const rhs = state.bits.mul(growth.sub(1)).div(startCost).add(1);
-  if (rhs.lte(1)) {
+  state.bits = remaining;
+  state.layers[layerId].level = level;
+  return true;
+}
+
+function purchaseAllMax(state) {
+  let purchased = false;
+  for (const layer of LAYERS) {
+    if (purchaseMaxLayer(state, layer.id)) {
+      purchased = true;
+    }
+  }
+  return purchased;
+}
+
+function calcSacrificeRewardFromPoints(points) {
+  const one = new Decimal(1);
+  return one.add(new Decimal(SACRIFICE_S).mul(points.add(1).log10()));
+}
+
+function resetLayersToBase(state) {
+  for (const layer of LAYERS) {
+    const layerState = state.layers[layer.id];
+    layerState.level = new Decimal(0);
+    layerState.delivered = new Decimal(0);
+  }
+}
+
+function doSacrifice(state) {
+  const effects = calcEffects(state);
+  const baseBits = calcBaseBits(state, effects);
+  if (baseBits.lt(1)) {
+    return false;
+  }
+  state.sacrificePoints = state.sacrificePoints.add(baseBits);
+  state.sacrificeMult = calcSacrificeRewardFromPoints(state.sacrificePoints);
+  state.bits = new Decimal(10);
+  resetLayersToBase(state);
+  return true;
+}
+
+function doPrestige(state) {
+  const runtimeLevel = state.layers.runtime.level;
+  if (runtimeLevel.lt(1)) {
     return false;
   }
 
-  const maxAffordable = Math.floor(rhs.log(layer.growth));
-  const toBuy = Math.min(maxAffordable, maxLevelsThisTier);
-  if (toBuy <= 0) {
-    return false;
+  for (const layer of LAYERS) {
+    const layerState = state.layers[layer.id];
+    const totalLevel = getTotalLevel(layerState);
+    const gainedBase = totalLevel.mul(PRESTIGE_BASE_PERCENT).floor();
+    if (gainedBase.gt(layerState.baseLevel)) {
+      layerState.baseLevel = gainedBase;
+    }
   }
 
-  const totalCost = sumGeometricSeries(startCost, growth, toBuy);
-  if (state.bits.lt(totalCost)) {
-    return false;
-  }
-
-  state.bits = state.bits.sub(totalCost);
-  state.layers[layerId].level = level.add(toBuy);
+  state.sacrificeMult = new Decimal(1);
+  state.sacrificePoints = new Decimal(0);
+  state.bits = new Decimal(10);
+  resetLayersToBase(state);
   return true;
 }
 
 function addBits(state, amount) {
-  state.bits = state.bits.add(amount);
+  state.bits = clampBits(state.bits.add(amount));
 }
 
 function resetProgress(state) {
   state.bits = new Decimal(10);
   state.fever = 0;
+  state.sacrificeMult = new Decimal(1);
+  state.sacrificePoints = new Decimal(0);
   for (const layer of LAYERS) {
     state.layers[layer.id].level = new Decimal(0);
     state.layers[layer.id].delivered = new Decimal(0);
+    state.layers[layer.id].baseLevel = new Decimal(0);
   }
-  state.layers.typing.level = new Decimal(1);
 }
 
 module.exports = {
@@ -332,6 +513,9 @@ module.exports = {
   calcMultiplier,
   purchaseLayer,
   purchaseMaxLayer,
+  purchaseAllMax,
+  doSacrifice,
+  doPrestige,
   addBits,
   resetProgress
 };

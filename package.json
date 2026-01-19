@@ -1,0 +1,58 @@
+{
+  "name": "vscode-idle-game",
+  "displayName": "VS Code Idle Game",
+  "description": "A tiny idle game that lives inside VS Code.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./main.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vscode-idle.focusIdleView",
+        "title": "Idle Game: Focus"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "vscode-idle-sidebar",
+          "title": "Idle Game",
+          "icon": "media/idle-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "icon": "media/idle-icon.svg",
+          "type": "webview",
+          "id": "vscode-idle-idleView",
+          "name": "Idle Game"
+        }
+      ],
+      "vscode-idle-sidebar": [
+        {
+          "icon": "media/idle-icon.svg",
+          "type": "webview",
+          "id": "vscode-idle-detailView",
+          "name": "Control Room"
+        },
+        {
+          "icon": "media/idle-icon.svg",
+          "type": "webview",
+          "id": "vscode-idle-debugView",
+          "name": "Debug"
+        }
+      ]
+    }
+  }
+}

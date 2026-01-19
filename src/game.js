@@ -307,6 +307,7 @@ function viewState(state) {
   const sacrificeNextReward = calcSacrificeRewardFromPoints(
     state.sacrificePoints.add(baseBits)
   );
+  const sacrificeDelta = sacrificeNextReward.sub(sacrificeReward);
   const runtimeLevel = state.layers.runtime.level;
   const totalBase = LAYERS.reduce((sum, layer) => {
     return sum.add(state.layers[layer.id].baseLevel);
@@ -325,6 +326,7 @@ function viewState(state) {
     const cost = calcLayerCost(state, layer.id);
     const totalLevel = getTotalLevel(layerState);
     const remainingToTier = getNextTierRemaining(totalLevel, effect.tier);
+    const canBuy = state.bits.gte(cost);
 
     return {
       id: layer.id,
@@ -343,9 +345,13 @@ function viewState(state) {
       nextTierText: formatDecimal(new Decimal(remainingToTier)),
       cText: formatDecimal(effect.c),
       eText: formatDecimal(effect.e),
-      costText: formatDecimal(cost)
+      costText: formatDecimal(cost),
+      canBuy,
+      canBuyMax: canBuy
     };
   });
+
+  const canBuyAny = layers.some((layer) => layer.canBuyMax);
 
   return {
     bits: state.bits.toString(),
@@ -365,8 +371,9 @@ function viewState(state) {
     totalBaseText: formatDecimal(totalBase),
     prestigeGainText: formatDecimal(prestigeGain),
     prestigePercentText: `${(PRESTIGE_BASE_PERCENT * 100).toFixed(0)}%`,
-    canSacrifice: baseBits.gte(1),
+    canSacrifice: baseBits.gte(1) && sacrificeDelta.gte(0.1),
     canPrestige: runtimeLevel.gte(1),
+    canBuyAny,
     layers
   };
 }

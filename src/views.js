@@ -151,6 +151,11 @@ function getHtml(webview, mode) {
       color: #10151f;
       background: linear-gradient(135deg, var(--accent), #ffcc66);
     }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+      filter: grayscale(0.6);
+    }
     .tag {
       padding: 4px 10px;
       border-radius: 999px;
@@ -211,7 +216,7 @@ function getHtml(webview, mode) {
     <div class="card">
       <div class="row" style="justify-content: space-between;">
         <strong>Layers</strong>
-        ${isDetail ? '<button data-action="max-all">Max All</button>' : ''}
+        ${isDetail ? '<button data-action="max-all" id="maxAllBtn">Max All</button>' : ''}
       </div>
       <div class="layers" id="layers"></div>
     </div>
@@ -244,6 +249,7 @@ function getHtml(webview, mode) {
     const prestigeGain = document.getElementById('prestigeGain');
     const sacrificeBtn = document.getElementById('sacrificeBtn');
     const prestigeBtn = document.getElementById('prestigeBtn');
+    const maxAllBtn = document.getElementById('maxAllBtn');
     const layers = document.getElementById('layers');
 
     function renderLayer(layer) {
@@ -260,8 +266,8 @@ function getHtml(webview, mode) {
         '    <span>Cost: <span data-layer=\"' + layer.id + '\" data-field=\"cost\">' + layer.costText + '</span> bits</span>',
         '  </div>',
         '  <div class=\"row\">',
-        isDetail ? '    <button data-layer=\"' + layer.id + '\">Upgrade</button>' : '',
-        isDetail ? '    <button data-layer=\"' + layer.id + '\" data-action=\"max\">Max</button>' : '',
+        isDetail ? '    <button data-layer=\"' + layer.id + '\" data-action=\"buy\"' + (layer.canBuy ? '' : ' disabled') + '>Upgrade</button>' : '',
+        isDetail ? '    <button data-layer=\"' + layer.id + '\" data-action=\"max\"' + (layer.canBuyMax ? '' : ' disabled') + '>Max</button>' : '',
         '  </div>',
         '</div>'
       ].join('\\n');
@@ -301,6 +307,14 @@ function getHtml(webview, mode) {
         updateLayerField(layer.id, 'c', layer.cText);
         updateLayerField(layer.id, 'e', layer.eText);
         updateLayerField(layer.id, 'cost', layer.costText);
+        const upgrade = layers.querySelector('button[data-layer=\"' + layer.id + '\"][data-action=\"buy\"]');
+        if (upgrade) {
+          upgrade.disabled = !layer.canBuy;
+        }
+        const maxBtn = layers.querySelector('button[data-layer=\"' + layer.id + '\"][data-action=\"max\"]');
+        if (maxBtn) {
+          maxBtn.disabled = !layer.canBuyMax;
+        }
       });
     }
 
@@ -349,6 +363,9 @@ function getHtml(webview, mode) {
       if (prestigeBtn) {
         prestigeBtn.disabled = !state.canPrestige;
       }
+      if (maxAllBtn) {
+        maxAllBtn.disabled = !state.canBuyAny;
+      }
       if (layers) {
         if (!layersBuilt) {
           buildLayers(state);
@@ -365,10 +382,13 @@ function getHtml(webview, mode) {
         if (!button) {
           return;
         }
+        if (button.disabled) {
+          return;
+        }
         const action = button.dataset.action;
         if (action === 'max') {
           vscode.postMessage({ type: 'buyLayerMax', layerId: button.dataset.layer });
-        } else {
+        } else if (action === 'buy') {
           vscode.postMessage({ type: 'buyLayer', layerId: button.dataset.layer });
         }
       });
@@ -377,6 +397,9 @@ function getHtml(webview, mode) {
     document.addEventListener('click', (event) => {
       const button = event.target.closest('button[data-action="max-all"]');
       if (!button) {
+        return;
+      }
+      if (button.disabled) {
         return;
       }
       vscode.postMessage({ type: 'buyAllMax' });
@@ -409,6 +432,9 @@ function getHtml(webview, mode) {
     document.addEventListener('click', (event) => {
       const button = event.target.closest('button[data-reset]');
       if (!button) {
+        return;
+      }
+      if (button.disabled) {
         return;
       }
       const action = button.dataset.reset;

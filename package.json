@@ -4,6 +4,7 @@
   "description": "A tiny idle game that lives inside VS Code.",
   "version": "0.0.1",
   "publisher": "local",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },

@@ -1,0 +1,6 @@
+.git
+.github
+.tool-versions
+.gitignore
+reference/
+node_modules/

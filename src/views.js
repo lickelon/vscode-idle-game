@@ -347,9 +347,16 @@ function getHtml(webview, mode) {
       }
       if (sacrificeMult) {
         sacrificeMult.textContent = state.sacrificeMultText;
+        if (state.sacrificeSoftCapped) {
+          sacrificeMult.textContent += ' (soft capped)';
+        }
       }
       if (sacrificeReward) {
-        sacrificeReward.textContent = state.sacrificeNextRewardText || state.sacrificeRewardText;
+        const rewardText = state.sacrificeNextRewardText || state.sacrificeRewardText;
+        sacrificeReward.textContent = rewardText;
+        if (state.sacrificeNextSoftCapped) {
+          sacrificeReward.textContent += ' (soft capped)';
+        }
       }
       if (prestigeBase) {
         prestigeBase.textContent = state.totalBaseText;

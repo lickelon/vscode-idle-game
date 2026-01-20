@@ -13,6 +13,8 @@ const {
   RUNTIME_EXP_FACTOR,
   TYPING_RUNTIME_POWER,
   SACRIFICE_S,
+  SACRIFICE_SOFTCAP_START,
+  SACRIFICE_SOFTCAP_DIVISOR,
   PRESTIGE_BASE_PERCENT,
   HARD_CAP,
   DELIVERED_PRESTIGE_BOOST,
@@ -58,6 +60,10 @@ function createGameState(saved) {
     lastInput: saved?.lastInput || 0,
     layers
   };
+
+  state.sacrificeMult = applySacrificeSoftCap(
+    calcSacrificeRewardFromPoints(state.sacrificePoints)
+  ).value;
 
   const allZero = LAYERS.every((layer) => state.layers[layer.id].level.eq(0));
   if (bits.eq(0) && allZero) {
@@ -303,11 +309,13 @@ function viewState(state) {
   const baseBits = calcBaseBits(state, effects);
   const multiplier = calcMultiplier(state.fever);
   const finalBits = baseBits.mul(state.sacrificeMult).mul(multiplier);
-  const sacrificeReward = calcSacrificeRewardFromPoints(state.sacrificePoints);
-  const sacrificeNextReward = calcSacrificeRewardFromPoints(
+  const sacrificeRaw = calcSacrificeRewardFromPoints(state.sacrificePoints);
+  const sacrificeRewardResult = applySacrificeSoftCap(sacrificeRaw);
+  const sacrificeNextRaw = calcSacrificeRewardFromPoints(
     state.sacrificePoints.add(baseBits)
   );
-  const sacrificeDelta = sacrificeNextReward.sub(sacrificeReward);
+  const sacrificeNextResult = applySacrificeSoftCap(sacrificeNextRaw);
+  const sacrificeDelta = sacrificeNextResult.value.sub(sacrificeRewardResult.value);
   const runtimeLevel = state.layers.runtime.level;
   const totalBase = LAYERS.reduce((sum, layer) => {
     return sum.add(state.layers[layer.id].baseLevel);
@@ -366,8 +374,10 @@ function viewState(state) {
     multiplierText: multiplier.toFixed(2),
     sacrificeMult: state.sacrificeMult.toString(),
     sacrificeMultText: formatDecimal(state.sacrificeMult),
-    sacrificeRewardText: formatDecimal(sacrificeReward),
-    sacrificeNextRewardText: formatDecimal(sacrificeNextReward),
+    sacrificeRewardText: formatDecimal(sacrificeRewardResult.value),
+    sacrificeNextRewardText: formatDecimal(sacrificeNextResult.value),
+    sacrificeSoftCapped: sacrificeRewardResult.softCapped,
+    sacrificeNextSoftCapped: sacrificeNextResult.softCapped,
     totalBaseText: formatDecimal(totalBase),
     prestigeGainText: formatDecimal(prestigeGain),
     prestigePercentText: `${(PRESTIGE_BASE_PERCENT * 100).toFixed(0)}%`,
@@ -453,6 +463,15 @@ function calcSacrificeRewardFromPoints(points) {
   return one.add(new Decimal(SACRIFICE_S).mul(points.add(1).log10()));
 }
 
+function applySacrificeSoftCap(mult) {
+  const capStart = new Decimal(SACRIFICE_SOFTCAP_START);
+  if (mult.lte(capStart)) {
+    return { value: mult, softCapped: false };
+  }
+  const capped = capStart.add(mult.sub(capStart).div(SACRIFICE_SOFTCAP_DIVISOR));
+  return { value: capped, softCapped: true };
+}
+
 function resetLayersToBase(state) {
   for (const layer of LAYERS) {
     const layerState = state.layers[layer.id];
@@ -468,7 +487,9 @@ function doSacrifice(state) {
     return false;
   }
   state.sacrificePoints = state.sacrificePoints.add(baseBits);
-  state.sacrificeMult = calcSacrificeRewardFromPoints(state.sacrificePoints);
+  state.sacrificeMult = applySacrificeSoftCap(
+    calcSacrificeRewardFromPoints(state.sacrificePoints)
+  ).value;
   state.bits = new Decimal(10);
   resetLayersToBase(state);
   return true;

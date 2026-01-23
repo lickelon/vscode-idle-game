@@ -32,8 +32,8 @@ function getHtml(webview, mode) {
     '        <span class="tag">Reset</span>',
     '      </div>',
     '      <div class="layer-meta">',
-    '        <span>Current mult: <span id="sacrificeMult">1</span>x</span>',
-    '        <span>After sacrifice: <span id="sacrificeReward">1</span>x</span>',
+    '        <span>Current mult: <span id="sacrificeMult">1</span></span>',
+    '        <span>After sacrifice: <span id="sacrificeReward">1</span></span>',
     '      </div>',
     '      <div class="row">',
     '        <button data-reset="sacrifice" id="sacrificeBtn">Sacrifice</button>',
@@ -163,6 +163,44 @@ function getHtml(webview, mode) {
       font-size: 11px;
       color: var(--muted);
     }
+    .toggle-switch {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--outline);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      padding: 4px 10px;
+    }
+    .toggle-track {
+      width: 34px;
+      height: 18px;
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      position: relative;
+    }
+    .toggle-knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #cbd5e1;
+      transition: transform 0.18s ease, background 0.18s ease;
+    }
+    .toggle-switch[aria-pressed="true"] .toggle-track {
+      background: rgba(76, 201, 240, 0.7);
+    }
+    .toggle-switch[aria-pressed="true"] .toggle-knob {
+      transform: translateX(16px);
+      background: #0b111a;
+    }
+    .toggle-label {
+      font-size: 12px;
+      color: var(--muted);
+    }
     .layers {
       display: grid;
       gap: 10px;
@@ -207,7 +245,7 @@ function getHtml(webview, mode) {
         <span>Base: <span id="baseBits">0</span> / sec</span>
         <span>Final: <span id="finalBits">0</span> / sec</span>
         <span>Fever: <span id="fever">0</span> | Multiplier: <span id="multiplier">1.00</span>x</span>
-        <span>Sacrifice Mult: <span id="sacrificeMult">1</span>x</span>
+        <span>Sacrifice Mult: <span id="sacrificeMult">1</span></span>
       </div>
     </header>
     `}
@@ -216,7 +254,7 @@ function getHtml(webview, mode) {
     <div class="card">
       <div class="row" style="justify-content: space-between;">
         <strong>Layers</strong>
-        ${isDetail ? '<button data-action="max-all" id="maxAllBtn">Max All</button>' : ''}
+        ${isDetail ? '<div class="row"><button data-action="max-all" id="maxAllBtn">Max All</button></div>' : ''}
       </div>
       <div class="layers" id="layers"></div>
     </div>
@@ -268,6 +306,7 @@ function getHtml(webview, mode) {
         '  <div class=\"row\">',
         isDetail ? '    <button data-layer=\"' + layer.id + '\" data-action=\"buy\"' + (layer.canBuy ? '' : ' disabled') + '>Upgrade</button>' : '',
         isDetail ? '    <button data-layer=\"' + layer.id + '\" data-action=\"max\"' + (layer.canBuyMax ? '' : ' disabled') + '>Max</button>' : '',
+        isDetail ? '    <button class=\"toggle-switch\" data-layer=\"' + layer.id + '\" data-action=\"autobuy\" aria-pressed=\"' + (layer.autoBuyEnabled ? 'true' : 'false') + '\"' + (layer.autoBuyUnlocked ? '' : ' disabled') + '><span class=\"toggle-track\"><span class=\"toggle-knob\"></span></span><span class=\"toggle-label\">Auto</span></button>' : '',
         '  </div>',
         '</div>'
       ].join('\\n');
@@ -315,6 +354,11 @@ function getHtml(webview, mode) {
         if (maxBtn) {
           maxBtn.disabled = !layer.canBuyMax;
         }
+        const autoBtn = layers.querySelector('button[data-layer=\"' + layer.id + '\"][data-action=\"autobuy\"]');
+        if (autoBtn) {
+          autoBtn.disabled = !layer.autoBuyUnlocked;
+          autoBtn.setAttribute('aria-pressed', layer.autoBuyEnabled ? 'true' : 'false');
+        }
       });
     }
 
@@ -346,14 +390,14 @@ function getHtml(webview, mode) {
         multiplierMini.textContent = state.multiplierText;
       }
       if (sacrificeMult) {
-        sacrificeMult.textContent = state.sacrificeMultText;
+        sacrificeMult.textContent = state.sacrificeMultText + 'x';
         if (state.sacrificeSoftCapped) {
           sacrificeMult.textContent += ' (soft capped)';
         }
       }
       if (sacrificeReward) {
         const rewardText = state.sacrificeNextRewardText || state.sacrificeRewardText;
-        sacrificeReward.textContent = rewardText;
+        sacrificeReward.textContent = rewardText + 'x';
         if (state.sacrificeNextSoftCapped) {
           sacrificeReward.textContent += ' (soft capped)';
         }
@@ -395,6 +439,9 @@ function getHtml(webview, mode) {
         const action = button.dataset.action;
         if (action === 'max') {
           vscode.postMessage({ type: 'buyLayerMax', layerId: button.dataset.layer });
+        } else if (action === 'autobuy') {
+          const enabled = button.getAttribute('aria-pressed') !== 'true';
+          vscode.postMessage({ type: 'toggleAutoBuy', layerId: button.dataset.layer, enabled });
         } else if (action === 'buy') {
           vscode.postMessage({ type: 'buyLayer', layerId: button.dataset.layer });
         }
@@ -411,6 +458,7 @@ function getHtml(webview, mode) {
       }
       vscode.postMessage({ type: 'buyAllMax' });
     });
+
 
     if (floatingSummary && summaryHeader) {
       const observer = new IntersectionObserver(

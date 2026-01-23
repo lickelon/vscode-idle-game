@@ -51,6 +51,10 @@ function createGameState(saved) {
   }
 
   const bits = clampBits(toDecimal(saved?.bits || 0));
+  const autoBuyEnabled = {};
+  for (const layer of LAYERS) {
+    autoBuyEnabled[layer.id] = !!saved?.autoBuyEnabled?.[layer.id];
+  }
   const state = {
     bits,
     sacrificePoints: toDecimal(saved?.sacrificePoints || 0),
@@ -58,6 +62,7 @@ function createGameState(saved) {
     fever: saved?.fever || 0,
     lastTick: saved?.lastTick || Date.now(),
     lastInput: saved?.lastInput || 0,
+    autoBuyEnabled,
     layers
   };
 
@@ -92,6 +97,7 @@ function serializeGameState(state) {
     fever: state.fever,
     lastTick: state.lastTick,
     lastInput: state.lastInput,
+    autoBuyEnabled: state.autoBuyEnabled,
     layers
   };
 }
@@ -238,6 +244,12 @@ function applyDelta(state, seconds, active) {
     return;
   }
 
+  for (const layer of LAYERS) {
+    if (state.autoBuyEnabled[layer.id]) {
+      purchaseMaxLayer(state, layer.id);
+    }
+  }
+
   const multBefore = calcMultiplier(state.fever);
   let multAfter = multBefore;
 
@@ -355,7 +367,9 @@ function viewState(state) {
       eText: formatDecimal(effect.e),
       costText: formatDecimal(cost),
       canBuy,
-      canBuyMax: canBuy
+      canBuyMax: canBuy,
+      autoBuyEnabled: !!state.autoBuyEnabled[layer.id],
+      autoBuyUnlocked: true
     };
   });
 
@@ -382,7 +396,7 @@ function viewState(state) {
     prestigeGainText: formatDecimal(prestigeGain),
     prestigePercentText: `${(PRESTIGE_BASE_PERCENT * 100).toFixed(0)}%`,
     canSacrifice: baseBits.gte(1) && sacrificeDelta.gte(0.1),
-    canPrestige: runtimeLevel.gte(1),
+    canPrestige: runtimeLevel.gte(1) && prestigeGain.gte(1),
     canBuyAny,
     layers
   };
@@ -526,6 +540,9 @@ function resetProgress(state) {
   state.fever = 0;
   state.sacrificeMult = new Decimal(1);
   state.sacrificePoints = new Decimal(0);
+  for (const layer of LAYERS) {
+    state.autoBuyEnabled[layer.id] = false;
+  }
   for (const layer of LAYERS) {
     state.layers[layer.id].level = new Decimal(0);
     state.layers[layer.id].delivered = new Decimal(0);

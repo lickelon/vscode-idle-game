@@ -134,6 +134,16 @@ function activate(context) {
       syncReset();
       syncDebug();
     }
+    if (message.type === 'toggleAutoBuy') {
+      if (message.layerId && state.autoBuyEnabled) {
+        state.autoBuyEnabled[message.layerId] = !!message.enabled;
+      }
+      persist();
+      syncSummary();
+      syncDetail();
+      syncReset();
+      syncDebug();
+    }
     if (message.type === 'sacrifice') {
       if (doSacrifice(state)) {
         persist();

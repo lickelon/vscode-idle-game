@@ -4,19 +4,16 @@ const {
   ACTIVE_WINDOW_MS,
   VIEW_IDS
 } = require('./constants');
-const {
-  createGameState,
-  serializeGameState,
-  applyDelta,
-  viewState,
-  purchaseLayer,
-  purchaseMaxLayer,
-  purchaseAllMax,
-  doSacrifice,
-  doPrestige,
-  addBits,
-  resetProgress
-} = require('./game');
+const { createGameState, serializeGameState, resetProgress } = require('./domain/state');
+const { applyDelta } = require('./domain/progression');
+const { viewState } = require('./ui/viewState');
+const { purchaseLayer, purchaseMaxLayer, purchaseAllMax } = require('./domain/purchases');
+const { doSacrifice, doPrestige } = require('./domain/resets');
+const { clampBits } = require('./lib/utils');
+
+function addBits(state, amount) {
+  state.bits = clampBits(state.bits.add(amount));
+}
 const { loadState, saveState } = require('./storage');
 const { getHtml } = require('./views');
 

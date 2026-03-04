@@ -17,6 +17,8 @@ function applyDelta(state, seconds, active) {
     return;
   }
 
+  const effectiveSeconds = seconds * (state.tickSpeed || 1);
+
   for (const layer of LAYERS) {
     if (state.autoBuyEnabled[layer.id]) {
       purchaseMaxLayer(state, layer.id);
@@ -27,10 +29,10 @@ function applyDelta(state, seconds, active) {
   let multAfter = multBefore;
 
   if (active) {
-    state.fever += FEVER_GAIN_PER_SEC * seconds;
+    state.fever += FEVER_GAIN_PER_SEC * effectiveSeconds;
     multAfter = calcMultiplier(state.fever);
   } else if (multBefore > 1) {
-    const newMult = Math.max(1, multBefore - MULT_DECAY_PER_SEC * seconds);
+    const newMult = Math.max(1, multBefore - MULT_DECAY_PER_SEC * effectiveSeconds);
     multAfter = newMult;
     state.fever = newMult <= 1 ? 0 : feverFromMultiplier(newMult);
   }
@@ -38,7 +40,7 @@ function applyDelta(state, seconds, active) {
   const effects = calcEffects(state);
   const baseBits = calcBaseBits(effects);
   const avgMult = (multBefore + multAfter) / 2;
-  const gain = baseBits.mul(state.sacrificeMult).mul(avgMult * seconds);
+  const gain = baseBits.mul(state.sacrificeMult).mul(avgMult * effectiveSeconds);
   state.bits = clampBits(state.bits.add(gain));
 
   const prestigeBaseTotal = LAYERS.reduce((sum, layer) => {
@@ -50,7 +52,7 @@ function applyDelta(state, seconds, active) {
     .add(new Decimal(DELIVERED_RATE).mul(sacrificeBoost))
     .pow(prestigeBoost)
     .sub(1);
-  const deliveredSeconds = new Decimal(seconds);
+  const deliveredSeconds = new Decimal(effectiveSeconds);
 
   state.layers.assembly.delivered = state.layers.assembly.delivered.add(
     effects.compiler.e.mul(deliveredRate).mul(deliveredSeconds)

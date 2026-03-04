@@ -37,6 +37,10 @@ function createGameState(saved) {
     fever: saved?.fever || 0,
     lastTick: saved?.lastTick || Date.now(),
     lastInput: saved?.lastInput || 0,
+    tickSpeed: saved?.tickSpeed || 1,
+    lastResetAt: saved?.lastResetAt || Date.now(),
+    lastSacrificeAt: saved?.lastSacrificeAt || Date.now(),
+    lastPrestigeAt: saved?.lastPrestigeAt || Date.now(),
     autoBuyEnabled,
     layers
   };
@@ -72,6 +76,10 @@ function serializeGameState(state) {
     fever: state.fever,
     lastTick: state.lastTick,
     lastInput: state.lastInput,
+    tickSpeed: state.tickSpeed,
+    lastResetAt: state.lastResetAt,
+    lastSacrificeAt: state.lastSacrificeAt,
+    lastPrestigeAt: state.lastPrestigeAt,
     autoBuyEnabled: state.autoBuyEnabled,
     layers
   };
@@ -90,6 +98,7 @@ function resetProgress(state) {
   state.fever = 0;
   state.sacrificeMult = new Decimal(1);
   state.sacrificePoints = new Decimal(0);
+  state.lastResetAt = Date.now();
   for (const layer of LAYERS) {
     state.autoBuyEnabled[layer.id] = false;
   }

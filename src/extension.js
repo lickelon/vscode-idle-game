@@ -122,6 +122,15 @@ function activate(context) {
       syncReset();
       syncDebug();
     }
+    if (message.type === 'setTickSpeed') {
+      const speed = Number(message.speed || 1);
+      state.tickSpeed = Number.isFinite(speed) && speed > 0 ? speed : 1;
+      persist();
+      syncSummary();
+      syncDetail();
+      syncReset();
+      syncDebug();
+    }
     if (message.type === 'debugReset') {
       resetProgress(state);
       persist();

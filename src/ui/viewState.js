@@ -7,8 +7,21 @@ const { calcMultiplier } = require('../domain/fever');
 const { calcLayerCost } = require('../domain/purchases');
 const { calcSacrificeRewardFromPoints, applySacrificeSoftCap } = require('../domain/sacrifice');
 
+function formatSeconds(seconds) {
+  if (!Number.isFinite(seconds)) {
+    return '0.0s';
+  }
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds - minutes * 60;
+  return `${minutes}m ${remainder.toFixed(0)}s`;
+}
+
 function viewState(state) {
   state.bits = clampBits(state.bits);
+  const now = Date.now();
   const effects = calcEffects(state);
   const baseBits = calcBaseBits(effects);
   const multiplier = calcMultiplier(state.fever);
@@ -66,6 +79,9 @@ function viewState(state) {
   });
 
   const canBuyAny = layers.some((layer) => layer.canBuyMax);
+  const resetElapsed = (now - (state.lastResetAt || now)) / 1000;
+  const sacrificeElapsed = (now - (state.lastSacrificeAt || now)) / 1000;
+  const prestigeElapsed = (now - (state.lastPrestigeAt || now)) / 1000;
 
   return {
     bits: state.bits.toString(),
@@ -90,6 +106,10 @@ function viewState(state) {
     canSacrifice: baseBits.gte(1) && sacrificeDelta.gte(0.1),
     canPrestige: runtimeLevel.gte(1) && prestigeGain.gte(1),
     canBuyAny,
+    tickSpeed: state.tickSpeed || 1,
+    resetElapsedText: formatSeconds(resetElapsed),
+    sacrificeElapsedText: formatSeconds(sacrificeElapsed),
+    prestigeElapsedText: formatSeconds(prestigeElapsed),
     layers
   };
 }

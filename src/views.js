@@ -13,10 +13,20 @@ function getHtml(webview, mode) {
     '<div class="card">',
     '  <strong>Debug</strong>',
     '  <div class="row">',
-    '    <button data-debug="add-1e3">+1e3 bits</button>',
-    '    <button data-debug="add-1e6">+1e6 bits</button>',
-    '    <button data-debug="add-1e9">+1e9 bits</button>',
-    '    <button data-debug="add-1e12">+1e12 bits</button>',
+    '    <input id="debugAddBitsInput" class="input" type="text" placeholder="Add bits (e.g. 1e9)">',
+    '    <button data-debug="add-bits">Add</button>',
+    '  </div>',
+    '  <div class="row">',
+    '    <input id="debugTickSpeedInput" class="input" type="number" min="0.1" step="0.1" placeholder="Tick speed (e.g. 2)">',
+    '    <button data-debug="set-speed">Set Speed</button>',
+    '    <span class="tag">Current: <span id="debugTickSpeed">1</span>x</span>',
+    '  </div>',
+    '  <div class="layer-meta">',
+    '    <span>Since reset: <span id="debugResetElapsed">0s</span></span>',
+    '    <span>Since sacrifice: <span id="debugSacrificeElapsed">0s</span></span>',
+    '    <span>Since prestige: <span id="debugPrestigeElapsed">0s</span></span>',
+    '  </div>',
+    '  <div class="row">',
     '    <button data-debug="reset">Reset</button>',
     '  </div>',
     '</div>'
@@ -150,6 +160,16 @@ function getHtml(webview, mode) {
       cursor: pointer;
       color: #10151f;
       background: linear-gradient(135deg, var(--accent), #ffcc66);
+    }
+    .input {
+      flex: 1;
+      min-width: 140px;
+      border-radius: 10px;
+      border: 1px solid var(--outline);
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      padding: 8px 10px;
+      font-size: 12px;
     }
     button:disabled {
       cursor: not-allowed;
@@ -288,6 +308,12 @@ function getHtml(webview, mode) {
     const sacrificeBtn = document.getElementById('sacrificeBtn');
     const prestigeBtn = document.getElementById('prestigeBtn');
     const maxAllBtn = document.getElementById('maxAllBtn');
+    const debugAddBitsInput = document.getElementById('debugAddBitsInput');
+    const debugTickSpeedInput = document.getElementById('debugTickSpeedInput');
+    const debugTickSpeed = document.getElementById('debugTickSpeed');
+    const debugResetElapsed = document.getElementById('debugResetElapsed');
+    const debugSacrificeElapsed = document.getElementById('debugSacrificeElapsed');
+    const debugPrestigeElapsed = document.getElementById('debugPrestigeElapsed');
     const layers = document.getElementById('layers');
 
     function renderLayer(layer) {
@@ -417,6 +443,18 @@ function getHtml(webview, mode) {
       if (maxAllBtn) {
         maxAllBtn.disabled = !state.canBuyAny;
       }
+      if (debugTickSpeed) {
+        debugTickSpeed.textContent = (state.tickSpeed || 1).toFixed(1);
+      }
+      if (debugResetElapsed) {
+        debugResetElapsed.textContent = state.resetElapsedText;
+      }
+      if (debugSacrificeElapsed) {
+        debugSacrificeElapsed.textContent = state.sacrificeElapsedText;
+      }
+      if (debugPrestigeElapsed) {
+        debugPrestigeElapsed.textContent = state.prestigeElapsedText;
+      }
       if (layers) {
         if (!layersBuilt) {
           buildLayers(state);
@@ -480,8 +518,19 @@ function getHtml(webview, mode) {
         vscode.postMessage({ type: 'debugReset' });
         return;
       }
-      const amount = action.replace('add-', '');
-      vscode.postMessage({ type: 'debugAddBits', amount });
+      if (action === 'add-bits') {
+        const amount = debugAddBitsInput ? debugAddBitsInput.value.trim() : '';
+        if (amount) {
+          vscode.postMessage({ type: 'debugAddBits', amount });
+        }
+        return;
+      }
+      if (action === 'set-speed') {
+        const speed = debugTickSpeedInput ? debugTickSpeedInput.value.trim() : '';
+        if (speed) {
+          vscode.postMessage({ type: 'setTickSpeed', speed });
+        }
+      }
     });
 
     document.addEventListener('click', (event) => {

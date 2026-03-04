@@ -15,6 +15,7 @@ function doSacrifice(state) {
     calcSacrificeRewardFromPoints(state.sacrificePoints)
   ).value;
   state.bits = new Decimal(10);
+  state.lastSacrificeAt = Date.now();
   resetLayersToBase(state);
   return true;
 }
@@ -36,6 +37,7 @@ function doPrestige(state) {
   state.sacrificeMult = new Decimal(1);
   state.sacrificePoints = new Decimal(0);
   state.bits = new Decimal(10);
+  state.lastPrestigeAt = Date.now();
   resetLayersToBase(state);
   return true;
 }

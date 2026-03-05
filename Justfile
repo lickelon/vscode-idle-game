@@ -1,4 +1,2 @@
-VSCE := "/home/lickelon/.npm-global/bin/vsce"
-
 deploy:
-  "{{VSCE}}" package
+  npx --yes @vscode/vsce package

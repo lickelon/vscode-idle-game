@@ -26,8 +26,8 @@ Progress is saved using VS Code's global state.
 - 티어: base=10, step=5, tierGrowth=1.5, tierPower=1.25.
 - Runtime: expFactor=0.001, typingPower=1.5.
 - Prestige: tierBoost=0.015, baseCarry=10%.
-- Sacrifice: s=0.35.
-- Delivered: rate=0.05, prestigeBoost=0.1, sacrificeBoost=0.3.
+- Sacrifice: s=0.35, softcapStart=100x, softcapDivisor=10.
+- Delivered: rate=0.05, prestigeBoost=0.08, sacrificeBoost=0.3.
 - 하드캡: bits <= 1.8e308.
 
 ### 배수 공식
@@ -119,7 +119,8 @@ finalBits = baseBits * SacrificeMult * ActivityMultiplier(Fever)
 ## 리셋 계층(초안)
 
 - Sacrifice: 모든 레이어 레벨 리셋 후, 최종 생산량에 곱 증가 보상.
-  - 보상 형태: `1 + s * log10(1 + sacrificePoints)` (s=0.35)
+  - 보상 형태(기본): `1 + s * log10(1 + sacrificePoints)` (s=0.35)
+  - softcap: 보상이 100x를 넘는 구간부터 초과분을 1/10으로 감쇠
   - sacrificePoints는 Sacrifice 시 `baseBits`만큼 누적.
 - Prestige: 레이어/희생 리셋 후, 레이어 베이스 레벨 상승(기본값 증가).
   - 각 레이어의 최종 레벨의 10%를 베이스 레벨로 승계(내림 처리).

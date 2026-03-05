@@ -18,6 +18,9 @@ function applyDelta(state, seconds, active) {
   }
 
   const effectiveSeconds = seconds * (state.tickSpeed || 1);
+  if (!Number.isFinite(effectiveSeconds) || effectiveSeconds <= 0) {
+    return;
+  }
 
   for (const layer of LAYERS) {
     if (state.autoBuyEnabled[layer.id]) {

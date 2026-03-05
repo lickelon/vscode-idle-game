@@ -3,6 +3,7 @@ const { LAYERS, TIER_GROWTH } = require('../constants');
 const { getTier, getTierThreshold } = require('./tiers');
 
 const LAYER_INDEX = Object.fromEntries(LAYERS.map((layer, index) => [layer.id, index]));
+const MAX_PURCHASE_MAX_ITERATIONS = 10000;
 
 function calcLayerCost(state, layerId) {
   const layer = LAYERS[LAYER_INDEX[layerId]];
@@ -45,8 +46,13 @@ function purchaseMaxLayer(state, layerId) {
   let level = state.layers[layerId].level;
   let remaining = state.bits;
   let purchased = 0;
+  let iterations = 0;
 
   while (true) {
+    iterations += 1;
+    if (iterations > MAX_PURCHASE_MAX_ITERATIONS) {
+      break;
+    }
     const tier = getTier(level);
     const tierCost = new Decimal(TIER_GROWTH).pow(tier - 1);
     const startCost = base.mul(growth.pow(level)).mul(tierCost);
@@ -58,11 +64,14 @@ function purchaseMaxLayer(state, layerId) {
     }
 
     const rhs = remaining.mul(growth.sub(1)).div(startCost).add(1);
-    if (rhs.lte(1)) {
+    if (rhs.lte(1) || Number.isNaN(rhs.m) || Number.isNaN(rhs.e)) {
       break;
     }
 
     const maxAffordable = Math.floor(rhs.log(layer.growth));
+    if (!Number.isFinite(maxAffordable)) {
+      break;
+    }
     const toBuy = Math.min(maxAffordable, maxLevelsThisTier);
     if (toBuy <= 0) {
       break;

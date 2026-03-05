@@ -1,7 +1,8 @@
 const { SOFT_CAP_K, SOFT_CAP_S } = require('../constants');
 
 function calcMultiplier(fever) {
-  const x = Math.log10(1 + fever);
+  const feverValue = Number.isFinite(fever) && fever > 0 ? fever : 0;
+  const x = Math.log10(1 + feverValue);
   return 1 + (x * SOFT_CAP_K) / (1 + x / SOFT_CAP_S);
 }
 

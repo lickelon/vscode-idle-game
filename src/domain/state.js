@@ -7,14 +7,47 @@ function toDecimal(value) {
   if (value instanceof Decimal) {
     return value;
   }
-  return new Decimal(value || 0);
+  try {
+    return new Decimal(value || 0);
+  } catch {
+    return new Decimal(0);
+  }
+}
+
+function normalizeDecimal(value, fallback = 0) {
+  const decimal = toDecimal(value);
+  if (Number.isNaN(decimal.m) || Number.isNaN(decimal.e)) {
+    return new Decimal(fallback);
+  }
+  if (!Number.isFinite(decimal.m) || !Number.isFinite(decimal.e)) {
+    return new Decimal(fallback);
+  }
+  if (decimal.lt(0)) {
+    return new Decimal(0);
+  }
+  return decimal;
+}
+
+function toFiniteNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toPositiveFiniteNumber(value, fallback) {
+  const parsed = toFiniteNumber(value, fallback);
+  return parsed > 0 ? parsed : fallback;
+}
+
+function toTimestamp(value, fallback) {
+  const parsed = toFiniteNumber(value, fallback);
+  return parsed > 0 ? parsed : fallback;
 }
 
 function createLayerState(savedLayer) {
   return {
-    level: toDecimal(savedLayer?.level || 0),
-    delivered: toDecimal(savedLayer?.delivered || 0),
-    baseLevel: toDecimal(savedLayer?.baseLevel || 0)
+    level: normalizeDecimal(savedLayer?.level || 0),
+    delivered: normalizeDecimal(savedLayer?.delivered || 0),
+    baseLevel: normalizeDecimal(savedLayer?.baseLevel || 0)
   };
 }
 
@@ -24,23 +57,24 @@ function createGameState(saved) {
     layers[layer.id] = createLayerState(saved?.layers?.[layer.id]);
   }
 
-  const bits = clampBits(toDecimal(saved?.bits || 0));
+  const bits = clampBits(normalizeDecimal(saved?.bits || 0));
   const autoBuyEnabled = {};
   for (const layer of LAYERS) {
     autoBuyEnabled[layer.id] = !!saved?.autoBuyEnabled?.[layer.id];
   }
 
+  const now = Date.now();
   const state = {
     bits,
-    sacrificePoints: toDecimal(saved?.sacrificePoints || 0),
-    sacrificeMult: toDecimal(saved?.sacrificeMult || 1),
-    fever: saved?.fever || 0,
-    lastTick: saved?.lastTick || Date.now(),
-    lastInput: saved?.lastInput || 0,
-    tickSpeed: saved?.tickSpeed || 1,
-    lastResetAt: saved?.lastResetAt || Date.now(),
-    lastSacrificeAt: saved?.lastSacrificeAt || Date.now(),
-    lastPrestigeAt: saved?.lastPrestigeAt || Date.now(),
+    sacrificePoints: normalizeDecimal(saved?.sacrificePoints || 0),
+    sacrificeMult: normalizeDecimal(saved?.sacrificeMult || 1, 1),
+    fever: Math.max(0, toFiniteNumber(saved?.fever, 0)),
+    lastTick: toTimestamp(saved?.lastTick, now),
+    lastInput: Math.max(0, toFiniteNumber(saved?.lastInput, 0)),
+    tickSpeed: toPositiveFiniteNumber(saved?.tickSpeed, 1),
+    lastResetAt: toTimestamp(saved?.lastResetAt, now),
+    lastSacrificeAt: toTimestamp(saved?.lastSacrificeAt, now),
+    lastPrestigeAt: toTimestamp(saved?.lastPrestigeAt, now),
     autoBuyEnabled,
     layers
   };

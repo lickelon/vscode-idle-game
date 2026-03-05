@@ -16,7 +16,12 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onCommand:vscode-idle.focusIdleView",
+    "onView:vscode-idle-idleView",
+    "onView:vscode-idle-detailView",
+    "onView:vscode-idle-resetView",
+    "onView:vscode-idle-debugView"
   ],
   "main": "./main.js",
   "contributes": {

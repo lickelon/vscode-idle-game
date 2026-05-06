@@ -26,8 +26,9 @@ Progress is saved using VS Code's global state.
 - 티어: base=10, step=5, tierGrowth=1.5, tierPower=1.25.
 - Runtime: expFactor=0.001, typingPower=1.5.
 - Prestige: tierBoost=0.015, baseCarry=10%.
-- Sacrifice: s=0.35, softcapStart=100x, softcapDivisor=10.
-- Delivered: rate=0.05, prestigeBoost=0.08, sacrificeBoost=0.3.
+- Sacrifice: s=0.35, softcapStart=100x, softcapScale=15.
+- Base Level: layer별 softcapStart=100, softcapScale=15.
+- Delivered: rate=0.05, prestigeBoost=0.1, sacrificeBoost=0.35.
 - 하드캡: bits <= 1.8e308.
 
 ### 배수 공식

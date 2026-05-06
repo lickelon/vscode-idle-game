@@ -4,17 +4,38 @@ const {
   TYPING_RUNTIME_POWER,
   TIER_POWER,
   PRESTIGE_TIER_BOOST,
+  BASE_LEVEL_SOFTCAP_START,
+  BASE_LEVEL_SOFTCAP_SCALE,
   LAYERS
 } = require('../constants');
 const { getTier } = require('./tiers');
+const { applyLogSoftCap } = require('./softcap');
 
 function getTotalLevel(layerState) {
   return layerState.level.add(layerState.baseLevel);
 }
 
+function getEffectiveBaseLevel(layerState) {
+  return applyLogSoftCap(
+    layerState.baseLevel,
+    BASE_LEVEL_SOFTCAP_START,
+    BASE_LEVEL_SOFTCAP_SCALE
+  ).value;
+}
+
+function getEffectiveTotalLevel(layerState) {
+  return layerState.level.add(getEffectiveBaseLevel(layerState));
+}
+
+function getEffectiveBaseTotal(state) {
+  return LAYERS.reduce((sum, layer) => {
+    return sum.add(getEffectiveBaseLevel(state.layers[layer.id]));
+  }, new Decimal(0));
+}
+
 function calcLayerEffect(state, layerId, runtimeEffect, runtimeBoost, tierPower) {
   const layerState = state.layers[layerId];
-  const totalLevel = getTotalLevel(layerState);
+  const totalLevel = getEffectiveTotalLevel(layerState);
   const tier = getTier(totalLevel);
   const purchased = runtimeBoost && layerId !== 'runtime' && layerId !== 'synthesis'
     ? totalLevel.mul(runtimeBoost)
@@ -37,10 +58,8 @@ function calcLayerEffect(state, layerId, runtimeEffect, runtimeBoost, tierPower)
 
 function calcEffects(state) {
   const effects = {};
-  const prestigeBaseTotal = LAYERS.reduce((sum, layer) => {
-    return sum.add(state.layers[layer.id].baseLevel);
-  }, new Decimal(0));
-  const tierPower = TIER_POWER * (1 + prestigeBaseTotal.add(1).log10() * PRESTIGE_TIER_BOOST);
+  const effectiveBaseTotal = getEffectiveBaseTotal(state);
+  const tierPower = TIER_POWER * (1 + effectiveBaseTotal.add(1).log10() * PRESTIGE_TIER_BOOST);
   const runtimeBase = calcLayerEffect(state, 'runtime', 1, null, tierPower).e;
   const runtimeFactor = 1 + RUNTIME_EXP_FACTOR * runtimeBase.toNumber();
   const runtimeBoost = new Decimal(runtimeBase.add(1).log10()).add(1);
@@ -50,7 +69,10 @@ function calcEffects(state) {
     effects[layer.id] = calcLayerEffect(state, layer.id, runtimeEffect, runtimeBoost, tierPower);
   }
 
-  return effects;
+  return {
+    ...effects,
+    effectiveBaseTotal
+  };
 }
 
 function calcBaseBits(effects) {
@@ -65,6 +87,9 @@ function calcBaseBits(effects) {
 
 module.exports = {
   getTotalLevel,
+  getEffectiveBaseLevel,
+  getEffectiveTotalLevel,
+  getEffectiveBaseTotal,
   calcEffects,
   calcBaseBits
 };

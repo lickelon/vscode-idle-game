@@ -46,10 +46,9 @@ function applyDelta(state, seconds, active) {
   const gain = baseBits.mul(state.sacrificeMult).mul(avgMult * effectiveSeconds);
   state.bits = clampBits(state.bits.add(gain));
 
-  const prestigeBaseTotal = LAYERS.reduce((sum, layer) => {
-    return sum.add(state.layers[layer.id].baseLevel);
-  }, new Decimal(0));
-  const prestigeBoost = new Decimal(1).add(prestigeBaseTotal.mul(DELIVERED_PRESTIGE_BOOST));
+  const prestigeBoost = new Decimal(1).add(
+    effects.effectiveBaseTotal.mul(DELIVERED_PRESTIGE_BOOST)
+  );
   const sacrificeBoost = new Decimal(1).add(state.sacrificeMult.mul(DELIVERED_SACRIFICE_BOOST));
   const deliveredRate = new Decimal(1)
     .add(new Decimal(DELIVERED_RATE).mul(sacrificeBoost))

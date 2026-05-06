@@ -1,7 +1,13 @@
 const Decimal = require('../vendor/break_infinity.min.js');
 const { PRESTIGE_BASE_PERCENT, LAYERS } = require('../constants');
 const { clampBits, formatDecimal } = require('../lib/utils');
-const { calcEffects, calcBaseBits, getTotalLevel } = require('../domain/effects');
+const {
+  calcEffects,
+  calcBaseBits,
+  getTotalLevel,
+  getEffectiveBaseLevel,
+  getEffectiveTotalLevel
+} = require('../domain/effects');
 const { getNextTierRemaining } = require('../domain/tiers');
 const { calcMultiplier } = require('../domain/fever');
 const { calcLayerCost } = require('../domain/purchases');
@@ -50,7 +56,9 @@ function viewState(state) {
     const effect = effects[layer.id];
     const cost = calcLayerCost(state, layer.id);
     const totalLevel = getTotalLevel(layerState);
-    const remainingToTier = getNextTierRemaining(totalLevel, effect.tier);
+    const effectiveBaseLevel = getEffectiveBaseLevel(layerState);
+    const effectiveTotalLevel = getEffectiveTotalLevel(layerState);
+    const remainingToTier = getNextTierRemaining(effectiveTotalLevel, effect.tier);
     const canBuy = state.bits.gte(cost);
 
     return {
@@ -59,14 +67,16 @@ function viewState(state) {
       level: layerState.level.toString(),
       delivered: layerState.delivered.toString(),
       baseLevel: layerState.baseLevel.toString(),
+      effectiveBaseLevel: effectiveBaseLevel.toString(),
+      effectiveTotalLevel: effectiveTotalLevel.toString(),
       tier: effect.tier,
       c: effect.c.toString(),
       e: effect.e.toString(),
       cost: cost.toString(),
-      levelText: `(${formatDecimal(layerState.level)}+${formatDecimal(layerState.baseLevel)})`,
+      levelText: `(${formatDecimal(layerState.level)}+${formatDecimal(effectiveBaseLevel)})`,
       deliveredText: formatDecimal(layerState.delivered),
       baseLevelText: formatDecimal(layerState.baseLevel),
-      totalLevelText: formatDecimal(totalLevel),
+      totalLevelText: formatDecimal(effectiveTotalLevel),
       nextTierText: formatDecimal(new Decimal(remainingToTier)),
       cText: formatDecimal(effect.c),
       eText: formatDecimal(effect.e),

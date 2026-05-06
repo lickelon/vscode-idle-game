@@ -18,9 +18,9 @@ const SACRIFICE_SOFTCAP_SCALE = 15;
 const BASE_LEVEL_SOFTCAP_START = 100;
 const BASE_LEVEL_SOFTCAP_SCALE = 15;
 const PRESTIGE_BASE_PERCENT = 0.1;
-const HARD_CAP = 1.8e308;
-const DELIVERED_PRESTIGE_BOOST = 0.08;
-const DELIVERED_SACRIFICE_BOOST = 0.3;
+const HARD_CAP = '1.8e308';
+const DELIVERED_PRESTIGE_BOOST = 0.1;
+const DELIVERED_SACRIFICE_BOOST = 0.35;
 
 const LAYERS = [
   { id: 'typing', name: 'Typing', baseCost: 10, growth: 1.2 },
